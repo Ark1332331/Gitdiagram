@@ -1,155 +1,97 @@
-[![Image](./docs/readme_img.png "GitDiagram Front Page")](https://gitdiagram.com/)
-
 ![License](https://img.shields.io/badge/license-MIT-blue.svg)
-[![Kofi](https://img.shields.io/badge/Kofi-F16061.svg?logo=ko-fi&logoColor=white)](https://ko-fi.com/ahmedkhaleel2004)
 
-# GitDiagram
+# GitDiagram（个人本地复现版）
 
-Turn any GitHub repository into an interactive diagram for visualization in seconds.
+把任意 GitHub 仓库转换成可交互的 Mermaid 架构图。
 
-You can also replace `hub` with `diagram` in any Github URL to access its diagram.
+本仓库用于我在 Windows 上本地跑通/复现 GitDiagram：默认使用 Next.js 内置生成接口（不强制依赖 FastAPI），并支持 OpenAI-compatible 的大模型服务（例如 DeepSeek）。
 
-## 🚀 Features
+## 功能
 
-- 👀 **Instant Visualization**: Convert any GitHub repository structure into a system design / architecture diagram
-- 🎨 **Interactivity**: Click on components to navigate directly to source files and relevant directories
-- ⚡ **Fast Generation**: Powered by OpenAI GPT-5.4 mini (configurable) for quick and accurate diagrams
-- 🖼️ **Export Options**: Copy Mermaid code or download the generated diagram as PNG
-- 🌐 **API Access**: Public API available for integration (WIP)
+- 把仓库结构生成 Mermaid 图（支持点击跳转到源码/目录）
+- 支持导出 Mermaid/PNG
+- 支持私有仓库（通过 GitHub PAT 提升速率限制）
 
-## ⚙️ Tech Stack
+## 我做过的关键修改
 
-- **Frontend**: Next.js, TypeScript, Tailwind CSS, ShadCN
-- **Backend**: FastAPI (Railway), with Next.js Route Handlers available as a fallback path
-- **Database**: PostgreSQL (with Drizzle ORM)
-- **AI**: OpenAI GPT-5.4 mini (via `OPENAI_MODEL`)
-- **Deployment**: Vercel (frontend) + Railway (backend)
-- **CI/CD**: GitHub Actions
-- **Analytics**: PostHog, Api-Analytics
+- **支持 OpenAI-compatible Provider**：新增 `OPENAI_BASE_URL`，并把流式生成切换到 Chat Completions 以兼容 DeepSeek 等。
+- **GitHub PAT 更易用**：
+	- 前端允许 `ghp_...`（classic）和 `github_pat_...`（fine-grained）
+	- GitHub API 认证统一使用 `Authorization: Bearer <token>`
+- **兼容 `.git` 仓库 URL**：输入 clone URL（以 `.git` 结尾）会自动剥离后缀。
+- **本地 DB 抖动更稳**：非关键 DB 查询失败不再导致页面直接报 “Something went wrong”。
 
-## 🔄 Backend Architecture Update
+## 快速开始（本地运行）
 
-GitDiagram now runs its primary generation backend on FastAPI (deployed on Railway).
+### 0. 环境要求
 
-Frontend calls are routed to the external backend by setting:
-- `NEXT_PUBLIC_USE_LEGACY_BACKEND=true`
-- `NEXT_PUBLIC_API_DEV_URL=https://<your-railway-domain>`
+- Node.js（建议 22 或 23；本项目声明不支持 24，但很多情况下也能跑）
+- pnpm
+- Docker Desktop（用于本地 Postgres）
 
-The variable name contains "LEGACY" for backward compatibility, but it now points to the primary external backend in production.
-
-## 🤔 About
-
-I created this because I wanted to contribute to open-source projects but quickly realized their codebases are too massive for me to dig through manually, so this helps me get started - but it's definitely got many more use cases!
-
-Given any public (or private!) GitHub repository it generates diagrams in Mermaid.js with OpenAI's GPT-5.4 mini! (Previously Claude 3.5 Sonnet)
-
-I extract information from the file tree and README for details and interactivity (you can click components to be taken to relevant files and directories).
-
-Most of what you might call the "processing" of this app is done with prompt engineering and a 3-step streaming pipeline in the FastAPI backend under `/backend`.
-
-## 🔒 How to diagram private repositories
-
-You can simply click on "Private Repos" in the header and follow the instructions by providing a GitHub personal access token with the `repo` scope.
-
-You can also self-host this app locally (backend separated as well!) with the steps below.
-
-## 🛠️ Self-hosting / Local Development
-
-## 🔧 Fork Notes (Local Changes)
-
-This branch includes a few practical fixes/improvements made while setting up GitDiagram locally:
-
-- **OpenAI-compatible providers (e.g. DeepSeek)**: Added `OPENAI_BASE_URL` support and switched streaming to Chat Completions so the app can work with OpenAI-compatible APIs.
-- **More robust GitHub PAT handling**:
-	- UI accepts both classic tokens (`ghp_...`) and fine-grained tokens (`github_pat_...`).
-	- GitHub API calls use `Authorization: Bearer <token>` for compatibility.
-- **GitHub URL parsing**: Handles repository URLs ending with `.git` (e.g. clone URLs) by stripping the suffix.
-- **Resilience on local DB hiccups**: Avoids failing the generation flow when a non-critical DB query (like “last generated date”) errors.
-
-Relevant files:
-- `OPENAI_BASE_URL` + streaming: [src/server/generate/openai.ts](src/server/generate/openai.ts) and [backend/app/services/openai_service.py](backend/app/services/openai_service.py)
-- GitHub auth + parsing: [src/server/generate/github.ts](src/server/generate/github.ts), [backend/app/services/github_service.py](backend/app/services/github_service.py), [src/features/diagram/github-url.ts](src/features/diagram/github-url.ts)
-- DB resilience: [src/app/_actions/repo.ts](src/app/_actions/repo.ts)
-
-1. Clone the repository
-
-```bash
-git clone https://github.com/ahmedkhaleel2004/gitdiagram.git
-cd gitdiagram
-```
-
-2. Install dependencies
+### 1. 安装依赖
 
 ```bash
 pnpm i
 ```
 
-3. Set up environment variables (create .env)
+### 2. 配置环境变量
 
 ```bash
 cp .env.example .env
 ```
 
-Then edit the `.env` file with your OpenAI API key and optional GitHub personal access token.
+编辑 `.env`（重点几项）：
 
-4. Start local database
+- `POSTGRES_URL`：本地一般是 `postgresql://postgres:<密码>@localhost:5432/gitdiagram`
+- `OPENAI_API_KEY`：你的 DeepSeek/OpenAI key
+- `OPENAI_BASE_URL`：OpenAI-compatible base（DeepSeek 形如 `https://api.deepseek.com/v1`）
+- `OPENAI_MODEL`：例如 `deepseek-reasoner`
+- `GITHUB_PAT`（可选）：提升 GitHub API 限额，避免 403 rate limit
+
+提示：`.env` 已被 `.gitignore` 忽略，不会提交到仓库。
+
+### 3. 启动本地数据库（Docker）
+
+如果你不想用 `start-database.sh`（它偏向 WSL），可以直接启动一个容器：
 
 ```bash
-chmod +x start-database.sh
-./start-database.sh
+docker run -d --name gitdiagram-postgres \
+	-e POSTGRES_USER=postgres \
+	-e POSTGRES_PASSWORD=localdev \
+	-e POSTGRES_DB=gitdiagram \
+	-p 5432:5432 postgres
 ```
 
-When prompted to generate a random password, input yes.
-The Postgres database will start in a container at `localhost:5432`
+（已存在容器时用 `docker start gitdiagram-postgres`）
 
-5. Initialize the database schema
+### 4. 初始化数据库表
 
 ```bash
 pnpm db:push
 ```
 
-You can view and interact with the database using `pnpm db:studio`
-
-6. Run frontend
+### 5. 启动开发服务器
 
 ```bash
 pnpm dev
 ```
 
-You can now access the website at `localhost:3000`.
+打开 `http://localhost:3000`。
 
-Run FastAPI backend (recommended if you want parity with production):
+## 常见问题（排错）
 
-```bash
-docker-compose up --build -d
-docker-compose logs -f api
-```
+- **端口占用 / 无法获取 `.next/dev/lock`**：
+	- 结束占用 3000 的进程，然后删除 `.next/dev/lock` 再 `pnpm dev`
+- **GitHub 403 rate limit**：
+	- 在页面右上角 `Private Repos` 里填 PAT（或在 `.env` 配 `GITHUB_PAT`），再重试
+- **DB 连接拒绝（ECONNREFUSED）**：
+	- 确认 `gitdiagram-postgres` 容器在跑，且 `.env` 的 `POSTGRES_URL` 端口/密码一致
 
-To route frontend calls to the external backend, set:
+## （可选）使用外部 FastAPI 后端
+
+本项目保留 FastAPI（`backend/`）路径。要让前端走外部后端：
+
 - `NEXT_PUBLIC_USE_LEGACY_BACKEND=true`
 - `NEXT_PUBLIC_API_DEV_URL=http://localhost:8000`
 
-For a full machine setup guide (Node/Python/uv versions + verification), see `docs/dev-setup.md`.
-
-Quick validation:
-
-```bash
-pnpm check
-pnpm test
-pnpm build
-```
-
-Railway backend docs: `docs/railway-backend.md`.
-
-## Contributing
-
-Contributions are welcome! Please feel free to submit a Pull Request.
-
-## Acknowledgements
-
-Shoutout to [Romain Courtois](https://github.com/cyclotruc)'s [Gitingest](https://gitingest.com/) for inspiration and styling
-
-## 🤔 Future Steps
-
-- Implement font-awesome icons in diagram
-- Implement an embedded feature like star-history.com but for diagrams. The diagram could also be updated progressively as commits are made.
