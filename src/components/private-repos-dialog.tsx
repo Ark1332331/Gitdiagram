@@ -19,6 +19,9 @@ export function PrivateReposDialog({
 }: PrivateReposDialogProps) {
   const [pat, setPat] = useState<string>("");
 
+  const isLikelyGitHubToken = (value: string) =>
+    /^(ghp_|github_pat_)/.test(value.trim());
+
   useEffect(() => {
     const storedPat = localStorage.getItem("github_pat");
     if (storedPat) {
@@ -82,7 +85,7 @@ export function PrivateReposDialog({
           </details>
           <Input
             type="password"
-            placeholder="ghp_..."
+            placeholder="ghp_... 或 github_pat_..."
             value={pat}
             onChange={(e) => setPat(e.target.value)}
             className="neo-input flex-1 rounded-md px-3 py-2 text-base font-bold placeholder:text-base placeholder:font-normal placeholder:text-gray-700 dark:placeholder:text-neutral-400"
@@ -106,7 +109,7 @@ export function PrivateReposDialog({
               </Button>
               <Button
                 type="submit"
-                disabled={!pat.startsWith("ghp_")}
+                disabled={!isLikelyGitHubToken(pat)}
                 className="neo-button px-4 py-2 disabled:opacity-50"
               >
                 Save Token

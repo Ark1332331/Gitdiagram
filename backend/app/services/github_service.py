@@ -136,8 +136,9 @@ class GitHubService:
     def _get_headers(self) -> dict[str, str]:
         if self.github_token:
             return {
-                "Authorization": f"token {self.github_token}",
+                "Authorization": f"Bearer {self.github_token}",
                 "Accept": "application/vnd.github+json",
+                "X-GitHub-Api-Version": "2022-11-28",
             }
 
         if self._can_use_app_auth():
@@ -148,7 +149,10 @@ class GitHubService:
                 "X-GitHub-Api-Version": "2022-11-28",
             }
 
-        return {"Accept": "application/vnd.github+json"}
+        return {
+            "Accept": "application/vnd.github+json",
+            "X-GitHub-Api-Version": "2022-11-28",
+        }
 
     def get_default_branch(self, username: str, repo: str) -> str:
         data = _fetch_json(

@@ -10,6 +10,15 @@ describe("parseGitHubRepoUrl", () => {
     });
   });
 
+  it("strips .git suffix from clone-style urls", () => {
+    expect(
+      parseGitHubRepoUrl("https://github.com/ahmedkhaleel2004/gitdiagram.git"),
+    ).toEqual({
+      username: "ahmedkhaleel2004",
+      repo: "gitdiagram",
+    });
+  });
+
   it("returns null for invalid urls", () => {
     expect(parseGitHubRepoUrl("https://gitlab.com/vercel/next.js")).toBeNull();
     expect(parseGitHubRepoUrl("not-a-url")).toBeNull();

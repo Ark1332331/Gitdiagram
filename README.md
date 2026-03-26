@@ -55,6 +55,22 @@ You can also self-host this app locally (backend separated as well!) with the st
 
 ## 🛠️ Self-hosting / Local Development
 
+## 🔧 Fork Notes (Local Changes)
+
+This branch includes a few practical fixes/improvements made while setting up GitDiagram locally:
+
+- **OpenAI-compatible providers (e.g. DeepSeek)**: Added `OPENAI_BASE_URL` support and switched streaming to Chat Completions so the app can work with OpenAI-compatible APIs.
+- **More robust GitHub PAT handling**:
+	- UI accepts both classic tokens (`ghp_...`) and fine-grained tokens (`github_pat_...`).
+	- GitHub API calls use `Authorization: Bearer <token>` for compatibility.
+- **GitHub URL parsing**: Handles repository URLs ending with `.git` (e.g. clone URLs) by stripping the suffix.
+- **Resilience on local DB hiccups**: Avoids failing the generation flow when a non-critical DB query (like “last generated date”) errors.
+
+Relevant files:
+- `OPENAI_BASE_URL` + streaming: [src/server/generate/openai.ts](src/server/generate/openai.ts) and [backend/app/services/openai_service.py](backend/app/services/openai_service.py)
+- GitHub auth + parsing: [src/server/generate/github.ts](src/server/generate/github.ts), [backend/app/services/github_service.py](backend/app/services/github_service.py), [src/features/diagram/github-url.ts](src/features/diagram/github-url.ts)
+- DB resilience: [src/app/_actions/repo.ts](src/app/_actions/repo.ts)
+
 1. Clone the repository
 
 ```bash

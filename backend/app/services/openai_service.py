@@ -17,6 +17,7 @@ ReasoningEffort = Literal["low", "medium", "high"]
 class OpenAIService:
     def __init__(self):
         self.default_api_key = os.getenv("OPENAI_API_KEY")
+        self.base_url = (os.getenv("OPENAI_BASE_URL") or "").strip() or None
 
     def _resolve_api_key(self, override_api_key: str | None = None) -> str:
         api_key = (override_api_key or self.default_api_key or "").strip()
@@ -39,13 +40,16 @@ class OpenAIService:
         ]
 
     @staticmethod
-    def _create_client(api_key: str) -> AsyncOpenAI:
+    def _create_client(api_key: str, base_url: str | None) -> AsyncOpenAI:
         # Keep explicit config local to this service.
-        return AsyncOpenAI(
-            api_key=api_key,
-            max_retries=2,
-            timeout=600,
-        )
+        kwargs: dict = {
+            "api_key": api_key,
+            "max_retries": 2,
+            "timeout": 600,
+        }
+        if base_url:
+            kwargs["base_url"] = base_url.rstrip("/")
+        return AsyncOpenAI(**kwargs)
 
     async def stream_completion(
         self,
@@ -62,26 +66,25 @@ class OpenAIService:
         payload: dict = {
             "model": model,
             "stream": True,
-            "input": self._build_input(system_prompt, user_prompt),
+            "messages": self._build_input(system_prompt, user_prompt),
         }
-        if reasoning_effort:
-            payload["reasoning"] = {"effort": reasoning_effort}
+        # NOTE: reasoning_effort is specific to OpenAI Responses API. We use Chat
+        # Completions for broader compatibility (e.g. DeepSeek base_url).
         if max_output_tokens:
-            payload["max_output_tokens"] = max_output_tokens
+            payload["max_tokens"] = max_output_tokens
 
-        client = self._create_client(resolved_api_key)
-        stream = await client.responses.create(**payload)
+        client = self._create_client(resolved_api_key, self.base_url)
+        stream = await client.chat.completions.create(**payload)
         try:
             async for event in stream:
-                if event.type == "response.output_text.delta":
-                    delta = getattr(event, "delta", None)
-                    if isinstance(delta, str) and delta:
-                        yield delta
+                # OpenAI-compatible streaming chunks
+                choices = getattr(event, "choices", None)
+                if not choices:
                     continue
-
-                if event.type == "error":
-                    message = getattr(event, "message", None) or "OpenAI stream failed."
-                    raise ValueError(str(message))
+                delta = getattr(choices[0], "delta", None)
+                content = getattr(delta, "content", None) if delta else None
+                if isinstance(content, str) and content:
+                    yield content
         finally:
             await stream.close()
             await client.close()
@@ -104,7 +107,11 @@ class OpenAIService:
         if reasoning_effort:
             payload["reasoning"] = {"effort": reasoning_effort}
 
-        client = self._create_client(resolved_api_key)
+        # Token counting is not universally supported across OpenAI-compatible providers.
+        if self.base_url and "openai.com" not in self.base_url:
+            raise ValueError("Token counting unsupported for custom OPENAI_BASE_URL.")
+
+        client = self._create_client(resolved_api_key, self.base_url)
         try:
             response = await client.responses.input_tokens.count(**payload)
             input_tokens = getattr(response, "input_tokens", None)

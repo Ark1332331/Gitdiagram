@@ -10,8 +10,11 @@ export function parseGitHubRepoUrl(url: string): ParsedGitHubRepo | null {
   const match = GITHUB_URL_PATTERN.exec(url.trim());
   if (!match) return null;
 
-  const [, username, repo] = match;
-  if (!username || !repo) return null;
+  const [, username, rawRepo] = match;
+  if (!username || !rawRepo) return null;
+
+  const repo = rawRepo.endsWith(".git") ? rawRepo.slice(0, -4) : rawRepo;
+  if (!repo) return null;
 
   return { username, repo };
 }

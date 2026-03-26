@@ -62,12 +62,14 @@ function createHeaders(githubPat?: string): HeadersInit {
   if (!token) {
     return {
       Accept: "application/vnd.github+json",
+      "X-GitHub-Api-Version": "2022-11-28",
     };
   }
 
   return {
-    Authorization: `token ${token}`,
+    Authorization: `Bearer ${token}`,
     Accept: "application/vnd.github+json",
+    "X-GitHub-Api-Version": "2022-11-28",
   };
 }
 

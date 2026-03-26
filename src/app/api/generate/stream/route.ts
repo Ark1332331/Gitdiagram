@@ -28,6 +28,30 @@ export const dynamic = "force-dynamic";
 export const maxDuration = 300;
 const MAX_MERMAID_FIX_ATTEMPTS = 3;
 
+function isTimeoutLikeError(error: unknown): boolean {
+  if (!error) return false;
+
+  const message =
+    error instanceof Error
+      ? error.message
+      : typeof error === "object" && error && "message" in error
+        ? (error as { message?: unknown }).message
+        : undefined;
+
+  return typeof message === "string" && /timed out|timeout/i.test(message);
+}
+
+function truncateTextByChars(text: string, maxChars: number): string {
+  if (text.length <= maxChars) return text;
+  return text.slice(0, Math.max(0, maxChars));
+}
+
+function truncateFileTreeByLines(fileTree: string, maxLines: number): string {
+  const lines = fileTree.split("\n");
+  if (lines.length <= maxLines) return fileTree;
+  return lines.slice(0, Math.max(1, maxLines)).join("\n");
+}
+
 function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
@@ -126,19 +150,71 @@ export async function POST(request: Request) {
             message: "Analyzing repository structure...",
           });
 
-          let explanation = "";
-          for await (const chunk of streamCompletion({
-            model,
-            systemPrompt: SYSTEM_FIRST_PROMPT,
-            userPrompt: toTaggedMessage({
-              file_tree: githubData.fileTree,
+          let contextFileTree = githubData.fileTree;
+          let contextReadme = githubData.readme;
+          const explanationAttempts = [
+            {
+              fileTree: githubData.fileTree,
               readme: githubData.readme,
-            }),
-            apiKey,
-            reasoningEffort: "medium",
-          })) {
-            explanation += chunk;
-            send({ status: "explanation_chunk", chunk });
+              label: undefined,
+            },
+            {
+              fileTree: truncateFileTreeByLines(githubData.fileTree, 6000),
+              readme: truncateTextByChars(githubData.readme, 24_000),
+              label:
+                "OpenAI request timed out. Retrying explanation with reduced repository context...",
+            },
+            {
+              fileTree: truncateFileTreeByLines(githubData.fileTree, 2000),
+              readme: truncateTextByChars(githubData.readme, 8_000),
+              label:
+                "OpenAI request timed out. Retrying explanation with minimal repository context...",
+            },
+          ];
+
+          let explanation = "";
+          let explanationError: unknown;
+          for (let attempt = 0; attempt < explanationAttempts.length; attempt++) {
+            const candidate = explanationAttempts[attempt]!;
+            contextFileTree = candidate.fileTree;
+            contextReadme = candidate.readme;
+
+            if (candidate.label) {
+              send({
+                status: "explanation",
+                message: `${candidate.label} (attempt ${attempt + 1}/${explanationAttempts.length})`,
+              });
+            }
+
+            try {
+              explanation = "";
+              for await (const chunk of streamCompletion({
+                model,
+                systemPrompt: SYSTEM_FIRST_PROMPT,
+                userPrompt: toTaggedMessage({
+                  file_tree: contextFileTree,
+                  readme: contextReadme,
+                }),
+                apiKey,
+                reasoningEffort: "low",
+                maxOutputTokens: 1400,
+              })) {
+                explanation += chunk;
+                send({ status: "explanation_chunk", chunk });
+              }
+              explanationError = undefined;
+              break;
+            } catch (error) {
+              explanationError = error;
+              if (isTimeoutLikeError(error) && attempt < explanationAttempts.length - 1) {
+                continue;
+              }
+              throw error;
+            }
+          }
+
+          if (!explanation && explanationError) {
+            throw explanationError;
           }
 
           send({
@@ -157,7 +233,7 @@ export async function POST(request: Request) {
             systemPrompt: SYSTEM_SECOND_PROMPT,
             userPrompt: toTaggedMessage({
               explanation,
-              file_tree: githubData.fileTree,
+              file_tree: contextFileTree,
             }),
             apiKey,
             reasoningEffort: "low",
